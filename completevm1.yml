@@ -1,0 +1,94 @@
+---
+- name: Create Azure VM
+  hosts: localhost
+  connection: local
+  tasks:
+  - name: Create a resource group
+    azure_rm_resourcegroup:
+      name: test
+      location: southindia
+      state: present
+  - name: Create virtual network
+    azure_rm_virtualnetwork:
+      resource_group: test
+      name: myVnetNewt
+      address_prefixes: "10.0.0.0/16"
+  - name: Add subnet
+    azure_rm_subnet:
+      resource_group: test
+      name: mySubnetNewt
+      address_prefix: "10.0.1.0/24"
+      virtual_network: myVnetNewt
+  - name: Create public IP address
+    azure_rm_publicipaddress:
+      resource_group: test
+      allocation_method: Static
+      name: myPublicIPNewt
+  - name: Create Network Security Group
+    azure_rm_securitygroup:
+      resource_group: test
+      name: myNetworkSecurityGroupNew1
+      rules:
+        - name: SSH
+          protocol: Tcp
+          destination_port_range: 22
+          access: Allow
+          priority: 1001
+          direction: Inbound
+        - name: Port_80
+          protocol: Tcp
+          destination_port_range: 80
+          access: Allow
+          priority: 1002
+          direction: Inbound
+  - name: Create virtual network inteface card
+    azure_rm_networkinterface:
+      resource_group: test
+      name: myNICNewt
+      virtual_network: myVnetNewt
+      subnet: mySubnetNewt
+      public_ip_name: myPublicIPNewt
+      security_group: myNetworkSecurityGroupNew1
+  - name: Create VM
+    azure_rm_virtualmachine:
+      resource_group: test
+      name: myVmtest
+      vm_size: Standard_B1s
+      admin_username: ansible
+      admin_password: ansible@123
+      ssh_public_keys:
+        - path: /home/ansible/.ssh/authorized_keys
+          key_data: "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDg1cUDoicu3LkrIHLDLSTfGxV1Rfh12o9NYSMrM6IMQBvk7jaDUvocZQnmwh8see1k/X2LoCzLbqyLX2eIr8F/l0IBAbEV+Om5CDC0E3UvJ6GrTQc9GfTxd3rmcdX3p6Wmvne3t8d5j4OsQ8SzcvdZtol0zjNjQWPOyKm+fiXX/woUYwQdoxFi0JGn2dkBB5M3mV0PzgyQ+Ex5VVJWCISFlNxdVDhxgTI+EA79TsZOkxU9BR6IJoAGP5PAwZefcmlKa8CWhnUQfV8mh2negeOjqnI7u3sOa7O/4fBSZjccfNRocb0oaeYhcrFay4O1q0svGELn8D+4xp2GCOgkzDqN root@myVM"
+      network_interfaces: myNICNewt
+      image:
+        offer: UbuntuServer
+        publisher: Canonical
+        sku: 16.04-LTS
+        version: latest
+  - name: Get Public IP
+    azure_rm_publicipaddress_facts:
+      resource_group: test
+      name: myPublicIPNewt
+    register: azure_ip
+
+  - debug: var=azure_ip verbosity=2
+
+  - name: Add new instance to host group
+    add_host:
+      hostname: "{{ item.properties.ipAddress }}"
+      groupname: jenkins
+    with_items: "{{ azure_ip.ansible_facts.azure_publicipaddresses }}"
+
+  - name: Add IP address of hosts
+    lineinfile:
+      dest: /etc/ansible/hosts
+      line:  "{{ item.properties.ipAddress }} ansible_ssh_user=ansible ansible_ssh_private_key_file=/home/azureuser/.ssh/key"
+      state: present
+      insertafter: '^\[apache\]'
+    with_items: "{{ azure_ip.ansible_facts.azure_publicipaddresses }}"
+  - name: tell the host about our servers it might want to ssh to
+    known_hosts:
+      path: /root/.ssh/known_hosts
+      name: "{{ item.properties.ipAddress }}"
+      key: "{{ lookup('pipe', 'ssh-keyscan -H {{ item.properties.ipAddress }}') }}"
+    with_items: "{{ azure_ip.ansible_facts.azure_publicipaddresses }}"
