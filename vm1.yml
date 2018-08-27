@@ -82,7 +82,7 @@
   - name: Add IP address of hosts
     lineinfile:
       dest: /etc/ansible/hosts
-      line:  "{{ item.properties.ipAddress }} ansible_ssh_user=ansible ansible_ssh_private_key_file=/home/azureuser/.ssh/key"
+      line:  "{{ item.properties.ipAddress }} ansible_ssh_user=ansible ansible_ssh_pass=ansible@123"
       state: present
       insertafter: '^\[apache\]'
     with_items: "{{ azure_ip.ansible_facts.azure_publicipaddresses }}"
