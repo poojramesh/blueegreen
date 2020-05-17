@@ -1,2 +1,1 @@
-# blueegreen
-blue green deployments pre-requisites
+Blue Green Deployment
